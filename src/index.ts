@@ -47,7 +47,7 @@ slackEvents.on('message', async (event: Message) => {
             const newText = runMutations(event.text);
 
             if (newText !== event.text) {
-                slack.chat.update({
+                await slack.chat.update({
                     channel: event.channel,
                     text: newText,
                     ts: event.ts
