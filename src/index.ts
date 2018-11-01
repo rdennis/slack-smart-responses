@@ -24,8 +24,8 @@ interface Mutator {
 // todo get these from some config?
 const mutators: Mutator[] = [
     {
-        regexp: /((?:PD|DAT|ES)-\d+)/gi,
-        replacement: 'https://jira.doctorlogic.com/browse/$1'
+        regexp: /\b((?:PD|DAT|ES)-\d+)\b/gi,
+        replacement: '<https://jira.doctorlogic.com/browse/$1|$1>'
     }
 ];
 
@@ -42,6 +42,7 @@ slackEvents.on('message', async (event: Message) => {
     // only allow users to make karma changes
     if (event.user) {
         console.log(`Received a message event: user ${event.user} in channel ${event.channel} says ${event.text}`);
+        console.dir(event);
         try {
             const newText = runMutations(event.text);
 
