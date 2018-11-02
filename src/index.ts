@@ -51,7 +51,7 @@ const responders: Responder[] = [
     RegExpResponder.build(
         '\\b((?:PD|DAT|ES)\\-\\d+)\\b',
         'gi',
-        '<https://jira.doctorlogic.com/browse/{0}|{0}>'
+        '<https://jira.doctorlogic.com/browse/$1|$1>'
     )
 ];
 
