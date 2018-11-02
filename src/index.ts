@@ -17,7 +17,7 @@ import { WebClient as SlackClient } from '@slack/client';
 const slack = new SlackClient(SLACK_OAUTH_ACCESS_TOKEN);
 
 interface Responder {
-    getResponse(message: string): string[]
+    getResponses(message: string): string[]
 }
 
 class RegExpResponder implements Responder {
@@ -28,7 +28,7 @@ class RegExpResponder implements Responder {
 
     constructor(private regexp: RegExp, private response: string) { }
 
-    getResponse(message: string) {
+    getResponses(message: string) {
         const responses = [];
         let match;
 
@@ -58,8 +58,8 @@ function getResponses(text: string) {
     let responses: string[] = []
 
     for (const responder of responders) {
-        const response = responder.getResponse(text);
-        responses.concat(response);
+        const newResponses = responder.getResponses(text);
+        responses = responses.concat(newResponses);
     }
 
     return responses;
