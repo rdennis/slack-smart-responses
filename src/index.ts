@@ -77,7 +77,7 @@ slackEvents.on('message', async (event: Message) => {
             console.dir(responses);
 
             if (responses.length) {
-                const text = responses.join('\n');
+                const text = `testing multiline\nmessage\n${responses.join('\n')}`;
                 console.log(`responding with text: "${text}"`);
                 await slack.chat.postMessage({
                     channel: event.channel,
