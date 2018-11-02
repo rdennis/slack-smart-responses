@@ -31,7 +31,7 @@ export function getEnvVal<T>(key: string, converter?: (str: string, defaultVal: 
     return strValue;
 }
 
-const fmtRegExp = /$\d+/g;
+const fmtRegExp = /\$\d+/g;
 /**
  * Formats a string using `$n` placeholders (like regex).
  * @example fmt('My $0 function is $1!', 'format', 'awesome')
