@@ -78,7 +78,7 @@ slackEvents.on('message', async (event: Message) => {
 
             if (responses.length) {
                 const text = responses.join('\n');
-
+                console.log(`responding with text: "${text}"`);
                 await slack.chat.postMessage({
                     channel: event.channel,
                     text,
