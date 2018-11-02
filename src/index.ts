@@ -23,7 +23,6 @@ interface Responder {
 class RegExpResponder implements Responder {
     static build(pattern: string, flags: string, response: string): RegExpResponder {
         const regexp = new RegExp(pattern, flags);
-
         return new RegExpResponder(regexp, response);
     }
 
@@ -82,12 +81,8 @@ slackEvents.on('message', async (event: Message) => {
 
                 await slack.chat.postMessage({
                     channel: event.channel,
-                    text: '',
-                    thread_ts: event.ts !== event.thread_ts ? event.thread_ts : undefined,
-                    attachments: [{
-                        fallback: text,
-                        text
-                    }]
+                    text,
+                    thread_ts: event.ts !== event.thread_ts ? event.thread_ts : undefined
                 });
             }
         } catch (err) {
