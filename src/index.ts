@@ -1,7 +1,7 @@
 import { config as envLoad } from 'dotenv';
 envLoad();
 
-import { getEnvVal, number } from './util';
+import { getEnvVal, number, fmt } from './util';
 
 // ENV variables
 const PORT = getEnvVal('PORT', number, 3000);
@@ -16,25 +16,58 @@ const slackEvents = createEventAdapter(SLACK_SIGNING_SECRET, { includeBody: true
 import { WebClient as SlackClient } from '@slack/client';
 const slack = new SlackClient(SLACK_OAUTH_ACCESS_TOKEN);
 
-interface Mutator {
-    regexp: RegExp
-    replacement: string
+interface Responder {
+    getResponse(message: string): string[]
+}
+
+class RegExpResponder implements Responder {
+    static build(pattern: string, flags: string, response: string): RegExpResponder {
+        const regexp = new RegExp(pattern, flags);
+
+        return new RegExpResponder(regexp, response);
+    }
+
+    constructor(private regexp: RegExp, private response: string) { }
+
+    getResponse(message: string) {
+        const responses = [];
+        let match;
+
+        do {
+            match = this.regexp.exec(message);
+
+            if (match) {
+                const response = fmt(this.response, ...match);
+                responses.push(response);
+            }
+        } while (match);
+
+        return responses;
+    }
 }
 
 // todo get these from some config?
-const mutators: Mutator[] = [
-    {
-        regexp: /\b((?:PD|DAT|ES)-\d+)\b/gi,
-        replacement: '<https://jira.doctorlogic.com/browse/$1|$1>'
-    }
+const responders: Responder[] = [
+    new RegExpResponder(
+        /\b((?:PD|DAT|ES)\-\d+)\b/gi,
+        '<https://jira.doctorlogic.com/browse/{0}|{0}>'
+    ),
+    RegExpResponder.build(
+        '\\b((?:PD|DAT|ES)\\-\\d+)\\b',
+        'gi',
+        '<https://jira.doctorlogic.com/browse/{0}|{0}>'
+    )
 ];
 
-function runMutations(text: string) {
-    for (const mutator of mutators) {
-        text = text.replace(mutator.regexp, mutator.replacement);
+function getResponses(text: string) {
+    const responses = []
+
+    for (const responder of responders) {
+        const response = responder.getResponse(text);
+        responses.push(response);
     }
 
-    return text;
+    return responses;
 }
 
 // Attach listeners to events by Slack Event "type". See: https://api.slack.com/events/message.im
@@ -44,13 +77,15 @@ slackEvents.on('message', async (event: Message) => {
         console.log(`Received a message event: user ${event.user} in channel ${event.channel} says ${event.text}`);
         console.dir(event);
         try {
-            const newText = runMutations(event.text);
+            const responses = getResponses(event.text);
+            console.log('responses');
+            console.dir(responses);
 
-            if (newText !== event.text) {
-                await slack.chat.update({
+            if (responses.length) {
+                await slack.chat.postMessage({
                     channel: event.channel,
-                    text: newText,
-                    ts: event.ts
+                    text: responses.join('\n'),
+                    thread_ts: event.ts !== event.thread_ts ? event.thread_ts : undefined
                 });
             }
         } catch (err) {

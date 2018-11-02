@@ -4,12 +4,13 @@ declare module '@slack/events-api' {
     import { RequestHandler } from 'express';
 
     interface Message {
-        type: string,
-        channel: string,
-        user: string,
-        text: string,
-        ts: string,
-        event_ts: string,
+        type: string
+        channel: string
+        user: string
+        text: string
+        ts: string
+        thread_ts?: string
+        event_ts: string
         channel_type: string
     }
 
