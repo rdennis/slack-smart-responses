@@ -55,11 +55,11 @@ const responders: Responder[] = [
 ];
 
 function getResponses(text: string) {
-    const responses = []
+    let responses: string[] = []
 
     for (const responder of responders) {
         const response = responder.getResponse(text);
-        responses.push(response);
+        responses.concat(response);
     }
 
     return responses;
@@ -77,7 +77,7 @@ slackEvents.on('message', async (event: Message) => {
             console.dir(responses);
 
             if (responses.length) {
-                const text = `testing multiline\nmessage\n${responses.join('\n')}`;
+                const text = responses.join('\n');
                 console.log(`responding with text: "${text}"`);
                 await slack.chat.postMessage({
                     channel: event.channel,
