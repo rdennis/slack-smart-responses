@@ -31,10 +31,10 @@ export function getEnvVal<T>(key: string, converter?: (str: string, defaultVal: 
     return strValue;
 }
 
-const fmtRegExp = /{(\d+)}/g;
+const fmtRegExp = /$\d+/g;
 /**
- * Formats a string using `{n}` placeholders.
- * @example fmt('My {0} function is {1}!', 'format', 'awesome')
+ * Formats a string using `$n` placeholders (like regex).
+ * @example fmt('My $0 function is $1!', 'format', 'awesome')
  * @param str The string containing placeholders
  * @param args The replacement values
  */
@@ -44,7 +44,7 @@ export function fmt(str: string, ...args: any[]): string {
         return str;
     }
 
-    // replace everything like {0} (that we got a replacement for)
+    // replace everything like $0 (that we got a replacement for)
     return str.replace(fmtRegExp, (_, capture) => {
         // make sure our capture is a valid int
         // the regex should do that, but let's be explicit

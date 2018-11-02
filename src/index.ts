@@ -48,10 +48,6 @@ class RegExpResponder implements Responder {
 
 // todo get these from some config?
 const responders: Responder[] = [
-    new RegExpResponder(
-        /\b((?:PD|DAT|ES)\-\d+)\b/gi,
-        '<https://jira.doctorlogic.com/browse/{0}|{0}>'
-    ),
     RegExpResponder.build(
         '\\b((?:PD|DAT|ES)\\-\\d+)\\b',
         'gi',
@@ -82,10 +78,16 @@ slackEvents.on('message', async (event: Message) => {
             console.dir(responses);
 
             if (responses.length) {
+                const text = responses.join('\n');
+
                 await slack.chat.postMessage({
                     channel: event.channel,
-                    text: responses.join('\n'),
-                    thread_ts: event.ts !== event.thread_ts ? event.thread_ts : undefined
+                    text: '',
+                    thread_ts: event.ts !== event.thread_ts ? event.thread_ts : undefined,
+                    attachments: [{
+                        fallback: text,
+                        text
+                    }]
                 });
             }
         } catch (err) {
