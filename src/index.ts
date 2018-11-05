@@ -1,7 +1,7 @@
 import { config as envLoad } from 'dotenv';
 envLoad();
 
-import { getEnvVal, number, fmt } from './util';
+import { getEnvVal, number } from './util';
 
 // ENV variables
 const PORT = getEnvVal('PORT', number, 3000);
@@ -14,43 +14,15 @@ const slackEvents = createEventAdapter(SLACK_SIGNING_SECRET, { includeBody: true
 
 // Initialize client with oauth token
 import { WebClient as SlackClient } from '@slack/client';
+import { Responder, RegExpResponder } from './Responder';
 const slack = new SlackClient(SLACK_OAUTH_ACCESS_TOKEN);
 
-interface Responder {
-    getResponses(message: string): string[]
-}
-
-class RegExpResponder implements Responder {
-    static build(pattern: string, flags: string, response: string): RegExpResponder {
-        const regexp = new RegExp(pattern, flags);
-        return new RegExpResponder(regexp, response);
-    }
-
-    constructor(private regexp: RegExp, private response: string) { }
-
-    getResponses(message: string) {
-        const responses = [];
-        let match;
-
-        do {
-            match = this.regexp.exec(message);
-
-            if (match) {
-                const response = fmt(this.response, ...match);
-                responses.push(response);
-            }
-        } while (match);
-
-        return responses;
-    }
-}
-
 // todo get these from some config?
-const responders: Responder[] = [
+let responders: Responder[] = [
     RegExpResponder.build(
         '\\b((?:PD|DAT|ES)\\-\\d+)\\b',
         'gi',
-        '<https://jira.doctorlogic.com/browse/$1|$1>'
+        '$1: https://jira.doctorlogic.com/browse/$1'
     )
 ];
 
@@ -73,10 +45,11 @@ slackEvents.on('message', async (event: Message) => {
         console.dir(event);
         try {
             const responses = getResponses(event.text);
-            console.log('responses');
-            console.dir(responses);
 
             if (responses.length) {
+                console.log('responses');
+                console.dir(responses);
+
                 const text = responses.join('\n');
                 console.log(`responding with text: "${text}"`);
                 await slack.chat.postMessage({
@@ -84,6 +57,8 @@ slackEvents.on('message', async (event: Message) => {
                     text,
                     thread_ts: event.ts !== event.thread_ts ? event.thread_ts : undefined
                 });
+            } else {
+                console.log('ignoring message, no responses found');
             }
         } catch (err) {
             console.error('An error occurred in the message event handler.');
@@ -96,6 +71,6 @@ slackEvents.on('message', async (event: Message) => {
 slackEvents.on('error', console.error);
 
 // Start a basic HTTP server
-slackEvents.start(PORT).then(() => {
+slackEvents.start(PORT).then(async () => {
     console.log(`server listening on port ${PORT}`);
 });

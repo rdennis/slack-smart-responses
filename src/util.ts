@@ -1,5 +1,3 @@
-import { Message } from "@slack/events-api";
-
 export function number(value: string, defaultVal: number) {
     let num = Number(value);
     return isNaN(num) ? defaultVal : num;
