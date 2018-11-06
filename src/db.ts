@@ -27,6 +27,7 @@ const ensureSchemaExists = (() => {
                     pattern text NOT NULL,
                     flags text,
                     response text NOT NULL,
+                    priority integer NOT NULL,
                     created_on timestamp NOT NULL,
                     edited_on timestamp NOT NULL
                 );
@@ -37,6 +38,7 @@ const ensureSchemaExists = (() => {
                     pattern text NOT NULL,
                     flags text,
                     response text NOT NULL,
+                    priority integer NOT NULL,
                     edited_by text NOT NULL,
                     edited_on timestamp NOT NULL
                 );
@@ -59,6 +61,7 @@ export interface ResponderEntry {
     pattern: string
     flags: string
     response: string
+    priority: number
     created_on: Date
     edited_by: string
     edited_on: Date
@@ -69,15 +72,10 @@ export interface CreateOrEditResponderParams {
     pattern?: string
     flags?: string
     response?: string
+    priority?: number
 }
 
 const p = (str: number) => `${str}`.padStart(2, '0');
-
-/**
- * Format a date as a postgresql timestamp.
- * @param date 
- */
-const timestamp = (date: Date) => `${date.getUTCFullYear()}-${p(date.getUTCMonth() + 1)}-${p(date.getUTCDate())} ${p(date.getUTCHours())}:${p(date.getUTCMinutes())}:${p(date.getUTCSeconds())}`;
 
 async function connect<T>(fn: (client: PoolClient) => Promise<T>) {
     const client = await pool.connect();
@@ -108,13 +106,30 @@ async function querySingle<T>(command: string) {
     return rows && rows[0];
 }
 
-export async function get(): Promise<ResponderEntry[]> {
-    const responderEntries = await query<ResponderEntry>('SELECT * FROM responder;');
+export async function get(id: number | string): Promise<ResponderEntry> {
+    if (typeof id === 'string') {
+        id = Number.parseInt(id, 10);
+    }
+
+    const responderEntry = await querySingle<ResponderEntry>(`SELECT * FROM responder WHERE id = ${id};`)
+    return responderEntry;
+}
+
+export async function getAll(orderBy?: keyof ResponderEntry, orderDir?: 'ASC' | 'DESC'): Promise<ResponderEntry[]> {
+    let sql = `SELECT * FROM responder`;
+
+    if (orderBy) {
+        sql = `${sql} ORDER BY ${orderBy} ${orderDir || ''}`
+    }
+
+    sql = `${sql};`;
+
+    const responderEntries = await query<ResponderEntry>(sql);
     return responderEntries;
 }
 
-export async function getResponders(): Promise<Responder[]> {
-    const responderEntries = await get();
+export async function getResponders(orderBy?: keyof ResponderEntry, orderDir?: 'ASC' | 'DESC'): Promise<Responder[]> {
+    const responderEntries = await getAll(orderBy, orderDir);
 
     return responderEntries.map(r => new RegExpResponder(
         new RegExp(r.pattern, r.flags),
@@ -122,8 +137,8 @@ export async function getResponders(): Promise<Responder[]> {
     ));
 }
 
-export async function createOrUpdateResponder(params: CreateOrEditResponderParams, user: string): Promise<number> {
-    const { flags, id, pattern, response } = params;
+export async function createOrUpdate(params: CreateOrEditResponderParams, user: string): Promise<number> {
+    const { flags, id, pattern, response, priority } = params;
     let command: string;
 
     if (typeof id !== 'undefined') {
@@ -131,7 +146,8 @@ export async function createOrUpdateResponder(params: CreateOrEditResponderParam
         let sqlParams: Map<string, string> = new Map(<[(keyof CreateOrEditResponderParams), string][]>[
             ['pattern', pattern],
             ['flags', flags],
-            ['response', response]
+            ['response', response],
+            ['priority', priority]
         ]
             .filter(p => typeof p[1] !== 'undefined')
             .map(p => [p[0], `'${p[1]}'`])
@@ -151,6 +167,7 @@ export async function createOrUpdateResponder(params: CreateOrEditResponderParam
             pattern,
             flags,
             response,
+            priority,
             edited_by,
             edited_on
         )
@@ -160,6 +177,7 @@ export async function createOrUpdateResponder(params: CreateOrEditResponderParam
                 pattern,
                 flags,
                 response,
+                priority,
                 '${user}',
                 now()
             FROM responder
@@ -183,6 +201,7 @@ export async function createOrUpdateResponder(params: CreateOrEditResponderParam
             pattern,
             flags,
             response,
+            priority,
             created_on,
             edited_on
         )
@@ -191,6 +210,7 @@ export async function createOrUpdateResponder(params: CreateOrEditResponderParam
             '${pattern}',
             '${flags}',
             '${response}',
+            '${priority}',
             now(),
             now()
         )
@@ -222,4 +242,13 @@ export async function createOrUpdateResponder(params: CreateOrEditResponderParam
             throw e;
         }
     });
+}
+
+export async function del(id: number | string): Promise<boolean> {
+    try {
+        await query(`DELETE FROM responder WHERE id = ${id};`);
+        return true;
+    } catch (e) {
+        return false;
+    }
 }

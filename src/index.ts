@@ -17,14 +17,18 @@ import { WebClient as SlackClient } from '@slack/client';
 import { Responder, RegExpResponder } from './Responder';
 const slack = new SlackClient(SLACK_OAUTH_ACCESS_TOKEN);
 
-// todo get these from some config?
-let responders: Responder[] = [
-    RegExpResponder.build(
-        '\\b((?:PD|DAT|ES)\\-\\d+)\\b',
-        'gi',
-        '$1: https://jira.doctorlogic.com/browse/$1'
-    )
-];
+import http from 'http';
+import express from 'express';
+import bodyParser from 'body-parser';
+
+import * as db from './db';
+
+// static responders loaded from db
+let responders: Responder[];
+
+async function loadResponders() {
+    responders = await db.getResponders('priority', 'ASC');
+}
 
 function getResponses(text: string) {
     let responses: string[] = []
@@ -37,13 +41,55 @@ function getResponses(text: string) {
     return responses;
 }
 
+function getForm(values: db.CreateOrEditResponderParams, action: string, buttonText: string, method = 'post') {
+    const { flags = '', pattern = '', response = '', priority } = values;
+
+    return `
+    <form action="${action}" method="${method}">
+        <label>
+            Pattern (see <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions">RegExp</a>)
+            <br/>
+            <input name="pattern" type="text" placeholder="ex: ((?:PD|DAT)\\-\\d+)" value="${pattern}" required />
+        </label>
+        <br/>
+        <label>
+            Flags (see <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions#Advanced_searching_with_flags">flags</a>)
+            <br/>
+            <input name="flags" type="text" placeholder="ex: gi" value="${flags}" />
+        </label>
+        <br/>
+        <label>
+            Response (see <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions#Using_parenthesized_substring_matches">matches</a>)
+            <br/>
+            <input name="response" type="text" placeholder="ex: got match $1" value="${response}" required />
+        </label>
+        <br/>
+        <label>
+            Priority (order of execution)
+            <br/>
+            <input name="priority" type="number" value="${priority}" required />
+        </label>
+        <br/>
+        <button type="submit">${buttonText}</button>
+    </form>
+    `;
+}
+
+const app = express();
+
+app.use('/slack/events', slackEvents.expressMiddleware());
+
 // Attach listeners to events by Slack Event "type". See: https://api.slack.com/events/message.im
 slackEvents.on('message', async (event: Message) => {
-    // only allow users to make karma changes
     if (event.user) {
         console.log(`Received a message event: user ${event.user} in channel ${event.channel} says ${event.text}`);
         console.dir(event);
         try {
+            // make sure we have responders
+            if (!responders) {
+                await loadResponders();
+            }
+
             const responses = getResponses(event.text);
 
             if (responses.length) {
@@ -70,7 +116,183 @@ slackEvents.on('message', async (event: Message) => {
 // Handle errors (see `errorCodes` export)
 slackEvents.on('error', console.error);
 
+app.use(bodyParser.urlencoded({ extended: false }));
+
+app.get('/responder/delete/:id', async (req, res) => {
+    const id = req.params.id;
+
+    const responder = await db.get(id);
+
+    if (!responder) {
+        res.sendStatus(404);
+        return;
+    }
+
+    const { pattern, flags, response, priority } = responder;
+
+    res.send(`
+    <h1>Delete Responder ${id}?</h1>
+    <dl>
+        <dt>ID</dt>
+        <dd>${id}</dd>
+
+        <dt>Pattern</dt>
+        <dd>${pattern}</dd>
+
+        <dt>Flags</dt>
+        <dd>${flags}</dd>
+
+        <dt>Response</dt>
+        <dd>${response}</dd>
+
+        <dt>Priority</dt>
+        <dd>${priority}</dd>
+    </dl>
+
+    <form method="post">
+        <button type="submit">Confirm</button>
+    </form>
+    <a href="/">Cancel</a>
+    `);
+});
+
+app.post('/responder/delete/:id', async (req, res) => {
+    const id = req.params.id;
+    console.log(`deleting responder: ${id}`)
+
+    await db.del(id);
+
+    // update responders
+    await loadResponders();
+
+    res.redirect('/');
+});
+
+app.get('/responder/:id', async (req, res) => {
+    const id = req.params.id;
+
+    const responder = await db.get(id);
+
+    if (!responder) {
+        res.sendStatus(404);
+        return;
+    }
+
+    res.send(`
+    <h1>
+        Edit Responder ${id}
+        <small>(<a href="/">return to list</a>)</small>
+    </h1>
+    ${getForm(responder, id, 'Update')}
+    `);
+});
+
+app.post('/responder/:id', async (req, res) => {
+    const id = req.params.id;
+    console.log(`updating responder: ${id}`);
+    console.dir(req.body);
+
+    const { pattern, flags = '', response, priority } = req.body;
+    await db.createOrUpdate({
+        id,
+        flags,
+        pattern,
+        response,
+        priority
+    }, 'server');
+
+    // update responders
+    await loadResponders();
+
+    res.redirect(`/responder/${id}`);
+});
+
+app.post('/responder', async (req, res) => {
+    console.log('creating responder');
+    console.dir(req.body);
+
+    const { pattern, flags = '', response, priority } = req.body;
+    // we don't have any authentication, so user is just server
+    const id = await db.createOrUpdate({
+        flags,
+        pattern,
+        response,
+        priority
+    }, 'server');
+
+    // update responders
+    await loadResponders();
+
+    res.redirect('/');
+});
+
+app.use(/\/favicon\.?(jpe?g|png|ico|gif)?$/i, (req, res) => {
+    res.sendStatus(204);
+});
+
+app.get('/', async (req, res) => {
+    if (req.url !== '/') {
+        res.sendStatus(404);
+        return;
+    }
+
+    const responders = await db.getAll();
+
+    res.send(`
+    <style>
+        table {
+            border-collapse: collapse;
+            border: 1px solid #f5f5f5;
+            background: #f5f5f5;
+        }
+        th, td {
+            padding: 5px 10px;
+        }
+        tbody > tr:nth-of-type(odd) {
+            background: #ffffff;
+        }
+    </style>
+    <h1>Slack Smart Responses</h1>
+    <p>Slack Smart Responses is up and running.</p>
+
+    <h2>Create Responder</h2>
+    ${getForm({}, "responder", "Create")}
+
+    <h2>Responders</h2>
+    <table id="responders-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Pattern</th>
+                <th>Flags</th>
+                <th>Response</th>
+                <th>Priority</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${responders.map(r => `
+            <tr>
+                <td>${r.id}</td>
+                <td>${r.pattern}</td>
+                <td>${r.flags}</td>
+                <td>${r.response}</td>
+                <td>${r.priority}</td>
+                <td>
+                    <a href="responder/${r.id}">Edit</a>
+                    <a class="delete" href="responder/delete/${r.id}">Delete</button>
+                </td>
+            </tr>`)}
+            ${responders.length < 1 ? '<tr><td colspan="6">No Responders</td></tr>' : ''}
+        </tbody>
+    </table>
+    `);
+});
+
 // Start a basic HTTP server
-slackEvents.start(PORT).then(async () => {
+http.createServer(app).listen(PORT, async () => {
     console.log(`server listening on port ${PORT}`);
+
+    // load our initial responders
+    await loadResponders();
 });

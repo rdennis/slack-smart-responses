@@ -1,4 +1,3 @@
-
 declare module '@slack/events-api' {
     import { EventEmitter } from 'events';
     import { RequestHandler } from 'express';
@@ -23,6 +22,7 @@ declare module '@slack/events-api' {
         }): SlackEventAdapter;
 
     interface SlackEventAdapter extends EventEmitter {
+        expressMiddleware(): RequestHandler
         start(port: number): Promise<void>
     }
 }
