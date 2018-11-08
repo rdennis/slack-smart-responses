@@ -14,7 +14,7 @@ const slackEvents = createEventAdapter(SLACK_SIGNING_SECRET, { includeBody: true
 
 // Initialize client with oauth token
 import { WebClient as SlackClient } from '@slack/client';
-import { Responder, RegExpResponder } from './Responder';
+import { Responder } from './Responder';
 const slack = new SlackClient(SLACK_OAUTH_ACCESS_TOKEN);
 
 import http from 'http';
@@ -42,10 +42,22 @@ function getResponses(text: string) {
 }
 
 function getForm(values: db.CreateOrEditResponderParams, action: string, buttonText: string, method = 'post') {
-    const { flags = '', pattern = '', response = '', priority } = values;
+    const { description = '', flags = '', pattern = '', response = '', title = '', priority } = values;
 
     return `
     <form action="${action}" method="${method}">
+        <label>
+            Title
+            <br/>
+            <input name="title" type="text" value="${title}" required />
+        </label>
+        <br/>
+        <label>
+            Description
+            <br/>
+            <textarea name="description" required>${description}</textarea>
+        </label>
+        <br/>
         <label>
             Pattern (see <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions">RegExp</a>)
             <br/>
@@ -128,13 +140,25 @@ app.get('/responder/delete/:id', async (req, res) => {
         return;
     }
 
-    const { pattern, flags, response, priority } = responder;
+    const { description, pattern, flags, response, title, priority } = responder;
 
     res.send(`
     <h1>Delete Responder ${id}?</h1>
     <dl>
+        ${Object
+            .keys(responder)
+            .map((k: keyof db.ResponderEntry) => `
+            <dt>${k}</dt>
+            <dd>${responder[k]}</dd>
+            `)}
         <dt>ID</dt>
         <dd>${id}</dd>
+
+        <dt>Title</dt>
+        <dd>${title}</dd>
+
+        <dt>Description</dt>
+        <dd>${description}</dd>
 
         <dt>Pattern</dt>
         <dd>${pattern}</dd>
@@ -204,20 +228,22 @@ app.post('/responder/:id', async (req, res) => {
     // update responders
     await loadResponders();
 
-    res.redirect(`/responder/${id}`);
+    res.redirect('/');
 });
 
 app.post('/responder', async (req, res) => {
     console.log('creating responder');
     console.dir(req.body);
 
-    const { pattern, flags = '', response, priority } = req.body;
-    // we don't have any authentication, so user is just server
-    const id = await db.createOrUpdate({
+    const { description, flags = '', pattern, priority, response, title } = req.body;
+
+    await db.createOrUpdate({
+        description,
         flags,
         pattern,
+        priority,
         response,
-        priority
+        title
     }, 'server');
 
     // update responders
@@ -263,6 +289,7 @@ app.get('/', async (req, res) => {
         <thead>
             <tr>
                 <th>ID</th>
+                <th>Title</th>
                 <th>Pattern</th>
                 <th>Flags</th>
                 <th>Response</th>
@@ -274,6 +301,7 @@ app.get('/', async (req, res) => {
             ${responders.map(r => `
             <tr>
                 <td>${r.id}</td>
+                <td>${r.title}</td>
                 <td>${r.pattern}</td>
                 <td>${r.flags}</td>
                 <td>${r.response}</td>
@@ -283,7 +311,7 @@ app.get('/', async (req, res) => {
                     <a class="delete" href="responder/delete/${r.id}">Delete</button>
                 </td>
             </tr>`)}
-            ${responders.length < 1 ? '<tr><td colspan="6">No Responders</td></tr>' : ''}
+            ${responders.length < 1 ? '<tr><td colspan="7">No Responders</td></tr>' : ''}
         </tbody>
     </table>
     `);

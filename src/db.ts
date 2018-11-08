@@ -1,5 +1,5 @@
-import { Pool, PoolClient, QueryResult } from 'pg';
-import { getEnvVal, bool, string } from './util';
+import { Pool, PoolClient } from 'pg';
+import { getEnvVal, bool } from './util';
 import { Responder, RegExpResponder } from './Responder';
 
 const pool = new Pool({
@@ -24,6 +24,8 @@ const ensureSchemaExists = (() => {
             await client.query(`
                 CREATE TABLE IF NOT EXISTS responder(
                     id serial PRIMARY KEY,
+                    title text NOT NULL,
+                    description text NOT NULL,
                     pattern text NOT NULL,
                     flags text,
                     response text NOT NULL,
@@ -35,6 +37,8 @@ const ensureSchemaExists = (() => {
                 CREATE TABLE IF NOT EXISTS responder_history(
                     id serial PRIMARY KEY,
                     responder_id integer NOT NULL,
+                    title text NOT NULL,
+                    description text NOT NULL,
                     pattern text NOT NULL,
                     flags text,
                     response text NOT NULL,
@@ -58,6 +62,8 @@ const ensureSchemaExists = (() => {
 
 export interface ResponderEntry {
     id: number
+    title: string
+    description: string
     pattern: string
     flags: string
     response: string
@@ -69,13 +75,14 @@ export interface ResponderEntry {
 
 export interface CreateOrEditResponderParams {
     id?: number
+    title?: string
+    description?: string
     pattern?: string
     flags?: string
     response?: string
     priority?: number
 }
 
-const p = (str: number) => `${str}`.padStart(2, '0');
 
 async function connect<T>(fn: (client: PoolClient) => Promise<T>) {
     const client = await pool.connect();
@@ -138,12 +145,14 @@ export async function getResponders(orderBy?: keyof ResponderEntry, orderDir?: '
 }
 
 export async function createOrUpdate(params: CreateOrEditResponderParams, user: string): Promise<number> {
-    const { flags, id, pattern, response, priority } = params;
+    const { description, flags, id, pattern, response, title, priority } = params;
     let command: string;
 
     if (typeof id !== 'undefined') {
         // update
         let sqlParams: Map<string, string> = new Map(<[(keyof CreateOrEditResponderParams), string][]>[
+            ['title', title],
+            ['description', description],
             ['pattern', pattern],
             ['flags', flags],
             ['response', response],
@@ -164,6 +173,8 @@ export async function createOrUpdate(params: CreateOrEditResponderParams, user: 
         command = `
         INSERT INTO responder_history (
             responder_id,
+            title,
+            description,
             pattern,
             flags,
             response,
@@ -174,6 +185,8 @@ export async function createOrUpdate(params: CreateOrEditResponderParams, user: 
         (
             SELECT
                 id,
+                title,
+                description,
                 pattern,
                 flags,
                 response,
@@ -198,6 +211,8 @@ export async function createOrUpdate(params: CreateOrEditResponderParams, user: 
         // create
         command = `
         INSERT INTO responder (
+            title,
+            description,
             pattern,
             flags,
             response,
@@ -207,6 +222,8 @@ export async function createOrUpdate(params: CreateOrEditResponderParams, user: 
         )
         VALUES
         (
+            '${title}',
+            '${description}',
             '${pattern}',
             '${flags}',
             '${response}',
